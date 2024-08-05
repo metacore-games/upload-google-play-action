@@ -4,6 +4,7 @@ import { runUpload } from "./edits"
 import { validateInAppUpdatePriority, validateReleaseFiles, validateStatus, validateUserFraction } from "./input-validation"
 import { unlink, writeFile } from 'fs/promises'
 import pTimeout from 'p-timeout'
+import { checkDuplicateVersionCodeError } from './errors'
 
 export async function run() {
     try {
@@ -87,7 +88,11 @@ export async function run() {
         )
     } catch (error: unknown) {
         if (error instanceof Error) {
-            core.setFailed(error.message)
+            if(checkDuplicateVersionCodeError(error.message)) {
+                core.info('Duplicate version code found. Upload is unnecessary.')
+            } else {
+                core.setFailed(error.message)
+            }
         } else {
             core.setFailed('Unknown error occurred.')
         }
