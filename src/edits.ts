@@ -31,6 +31,7 @@ export interface EditOptions {
     status: string;
     changesNotSentForReview?: boolean;
     existingEditId?: string;
+    versionCodesToRetain?: number[]
 }
 
 export async function runUpload(
@@ -45,7 +46,8 @@ export async function runUpload(
     changesNotSentForReview: boolean,
     existingEditId: string | undefined,
     status: string,
-    validatedReleaseFiles: string[]
+    validatedReleaseFiles: string[],
+    versionCodesToRetain: number[] | undefined
 ) {
     const auth = new google.auth.GoogleAuth({
         scopes: ['https://www.googleapis.com/auth/androidpublisher']
@@ -63,7 +65,8 @@ export async function runUpload(
         name: name,
         changesNotSentForReview: changesNotSentForReview,
         existingEditId: existingEditId,
-        status: status
+        status: status,
+        versionCodesToRetain: versionCodesToRetain
     }, validatedReleaseFiles);
 
     if (result) {
@@ -73,7 +76,6 @@ export async function runUpload(
 
 async function uploadToPlayStore(options: EditOptions, releaseFiles: string[]): Promise<string | void> {
     const internalSharingDownloadUrls: string[] = []
-    
     // Check the 'track' for 'internalsharing', if so switch to a non-track api
     if (options.track === 'internalsharing') {
         core.debug("Track is Internal app sharing, switch to special upload api")
@@ -100,8 +102,10 @@ async function uploadToPlayStore(options: EditOptions, releaseFiles: string[]): 
             internalSharingDownloadUrls.push(url);
         }
 
+        const combinedVersionCodes = versionCodes.concat(options.versionCodesToRetain || [])
+
         // Add the uploaded artifacts to the Edit track
-        await addReleasesToTrack(appEditId, options, versionCodes);
+        await addReleasesToTrack(appEditId, options, combinedVersionCodes);
 
         // Commit the pending Edit
         core.info(`Committing the Edit`)
@@ -115,6 +119,13 @@ async function uploadToPlayStore(options: EditOptions, releaseFiles: string[]): 
         // Simple check to see whether commit was successful
         if (res.data.id) {
             core.info(`Successfully committed ${res.data.id}`);
+		
+	    core.setOutput("committedEditId", res.data.id);
+	    core.setOutput("commitedEditIdExpiryTimeSeconds", res.data.expiryTimeSeconds);
+		
+   	    core.exportVariable("COMMITED_EDIT_ID", res.data.id);  
+	    core.exportVariable("COMMITED_EDIT_ID_EXPIRY_IN_TIME_SECONDS", res.data.expiryTimeSeconds);  
+		
             return res.data.id
         } else {
             core.setFailed(`Error ${res.status}: ${res.statusText}`);
